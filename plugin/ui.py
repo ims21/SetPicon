@@ -704,26 +704,10 @@ class setPicon(Screen, HelpableScreen):
 				searchPaths = (eEnv.resolve('${datadir}/enigma2/%s/'), '/media/cf/%s/', '/media/usb/%s/')
 
 		for path in searchPaths:
-			print "patch", path
 			if pathExists(path):
 				pngname = path + serviceRef + EXT
 				if pathExists(pngname):
 					self.lastPath = path
-					return pngname
-		return ""
-
-	def findPicon(serviceName):
-		global lastPiconPath
-		if lastPiconPath is not None:
-			pngname = lastPiconPath + serviceName + ".png"
-			if pathExists(pngname):
-				return pngname
-		global searchPaths
-		for path in searchPaths:
-			if pathExists(path):
-				pngname = path + serviceName + ".png"
-				if pathExists(pngname):
-					lastPiconPath = path
 					return pngname
 		return ""
 
