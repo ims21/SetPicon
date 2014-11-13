@@ -55,8 +55,9 @@ config.plugins.setpicon.bookmarks = ConfigLocations(default=[SOURCE])
 config.plugins.setpicon.save2backtoo = ConfigYesNo(default=False)
 config.plugins.setpicon.backup = ConfigDirectory(BACKUP)
 config.plugins.setpicon.backupsort = ConfigSelection(default = "0", choices = [("0",_("no")),("1",_("by providers")),("2",_("by orbital position"))])
+config.plugins.setpicon.filter = ConfigSelection(default = "0", choices = [("0",_("all")),("1",_("as service only")),("2",_("as name only"))])
 config.plugins.setpicon.zap = ConfigYesNo(default=False)
-config.plugins.setpicon.reverse = ConfigYesNo(default=False)
+config.plugins.setpicon.sorting = ConfigSelection(default = "0", choices = [("0",_("unsorted")),("1",_("sorted")),("2",_("sorted in reverse order"))])
 
 cfg = config.plugins.setpicon
 
@@ -120,6 +121,7 @@ class setPicon(Screen, HelpableScreen):
 		self.services = services
 		self.bouquetname = bouquetname
 		self.setup_title = self.bouquetname
+		self.setTitle(_("SetPicon"))
 
 		self.EMPTY = self.skin_path + "/img/empty.png"
 
@@ -180,6 +182,7 @@ class setPicon(Screen, HelpableScreen):
 		self.orbital = None
 		self.provider = None
 		self.providers = []
+		self.picon = []
 
 		self.ServicesList = []
 		self.sidx = 0
@@ -258,10 +261,13 @@ class setPicon(Screen, HelpableScreen):
 
 	def getCurrentService(self):
 		from ServiceReference import ServiceReference
-		if self.session.nav.getCurrentlyPlayingServiceReference():
-			self.name = ServiceReference(self.session.nav.getCurrentlyPlayingServiceReference()).getServiceName()
-			self.refstr = self.session.nav.getCurrentlyPlayingServiceReference().toString()
+		service = self.session.nav.getCurrentlyPlayingServiceReference()
+		if service:
+			self.name = ServiceReference(service).getServiceName()
+			self.refstr = ':'.join(service.toString().split(':')[:11])
 			self.orbital =  self.getOrbitalPosition(self.refstr)
+			if self.orbital == _("Playback"):
+				return
 			self.provider = self.getProviderName()
 			self.displayServiceParams()
 			self.setCurrentServiceIndex()
@@ -449,23 +455,34 @@ class setPicon(Screen, HelpableScreen):
 
 	def readPngFiles(self):
 		self.idx = 0
-		self.picon = []
 		self.maxPicons = 0
+		self.picon = []
 		for filename in os.listdir(SOURCE):
 			if filename.endswith('.png'):
 				if os.path.isfile(SOURCE+filename):
-					self.picon.append(filename[:-4])
-					self.maxPicons += 1
+					if cfg.filter.value == "0": # all
+						self.picon.append(filename[:-4])
+						self.maxPicons += 1
+					elif cfg.filter.value == "1": # service_ref only
+						if filename[0:3] == "1_0":
+							self.picon.append(filename[:-4])
+							self.maxPicons += 1
+					elif cfg.filter.value == "2": # names only
+						if filename[0:3] != "1_0":
+							self.picon.append(filename[:-4])
+							self.maxPicons += 1
 		self.sortPicons()
 		self.search = False
 		self.blocked = False
 		self.displayText()
 
 	def sortPicons(self):
-		if cfg.reverse.value:
+		if cfg.sorting.value == "1":
 			self.picon.sort()
-		else:
+		elif cfg.sorting.value == "2":
 			self.picon.reverse()
+		else:
+			pass
 
 	def searching(self):
 		if self.search_picon:
@@ -561,7 +578,7 @@ class setPicon(Screen, HelpableScreen):
 					except:
 						print "Failed to unlink", filename
 				else:
-					 if self.rmPath == BACKUP:
+					if self.rmPath == BACKUP:
 						try:
 							shutil.rmtree(filename)
 						except:
@@ -695,6 +712,8 @@ class setPicon(Screen, HelpableScreen):
 	def getOrbitalPosition(self, serviceRef, revert=False):
 		if serviceRef.lower().find("%3a//") != -1:
 			return _("Stream")
+		if len(serviceRef.split(':', 10)[10]):
+			return _("Playback")
 		b = int(serviceRef.split(':', 10)[6][:-4],16)
 		if b == 0xeeee:
 			return _("Terrestrial")
@@ -709,7 +728,7 @@ class setPicon(Screen, HelpableScreen):
 		return ("%d.%d%s") % (b // 10, b % 10, direction)
 
 	def addGrade(self, orbital):
-		if orbital in (_("Terrestrial"), _("Cable"), _("Stream")):
+		if orbital in (_("Terrestrial"), _("Cable"), _("Stream"), _("Playback")):
 			return orbital
 		return orbital[:-1]+ "\xc2\xb0 " + orbital[-1:]
 
@@ -792,17 +811,23 @@ class setPicon(Screen, HelpableScreen):
 
 	def callConfig(self):
 		self.lastdir = cfg.source.value
-		self.lastrev = cfg.reverse.value
+		self.lastrev = cfg.sorting.value
+		self.lastfilter = cfg.filter.value
 		self.session.openWithCallback(self.afterConfig, setPiconCfg, self.skin_path)
 
 	def afterConfig(self, data=None):
 		self.displayText()
-		if self.lastdir != cfg.source.value:
+		if self.lastdir != cfg.source.value or self.lastfilter != cfg.filter.value:
 			self.getStoredPicons()
 		else:
-			if self.lastrev != cfg.reverse.value:
-				self.sortPicons()
-			self.displayPicon()
+			if self.lastrev == cfg.sorting.value:
+				self.displayPicon()
+			else:
+				if cfg.sorting.value == "0":
+					self.getStoredPicons()	
+				else:
+					self.sortPicons()
+					self.displayPicon()
 
 ### for graphics
 	def initGraphic(self):
@@ -908,7 +933,7 @@ class setPiconCfg(Screen, ConfigListScreen):
 		self["key_yellow"] = Label(_("Swap Dirs"))
 		self["key_blue"] = Label(_("Same Dirs"))
 
-		self["statusbar"] = Label("ims (c) 2012, v0.38,  %s" % getMemory(7))
+		self["statusbar"] = Label("ims (c) 2014, v0.41,  %s" % getMemory(7))
 		self["actions"] = ActionMap(["SetupActions", "ColorActions"],
 		{
 			"green": self.save,
@@ -933,6 +958,7 @@ class setPiconCfg(Screen, ConfigListScreen):
 		self.backup_entry = getConfigListEntry(_("Backup directory"), cfg.backup)
 
 		self.setPiconCfglist = []
+		self.setPiconCfglist.append(getConfigListEntry(_("Accept picons"), cfg.filter))
 		self.setPiconCfglist.append(getConfigListEntry(_("Save picon as"), cfg.type))
 		if cfg.type.value == "1":
 			self.setPiconCfglist.extend((
@@ -942,7 +968,7 @@ class setPiconCfg(Screen, ConfigListScreen):
 		self.setPiconCfglist.append(self.target_entry)
 		self.setPiconCfglist.append(getConfigListEntry(_("Saving current picons from"), cfg.allpicons))
 		self.setPiconCfglist.append(getConfigListEntry(_("Display picon's name"), cfg.filename))
-		self.setPiconCfglist.append(getConfigListEntry(_("Picons list reversed"), cfg.reverse))
+		self.setPiconCfglist.append(getConfigListEntry(_("Display picons"), cfg.sorting))
 		self.setPiconCfglist.append(getConfigListEntry(_("SetPicon in E-menu"), cfg.extmenu))
 		self.setPiconCfglist.append(getConfigListEntry(_("ZAP when is changed service"), cfg.zap))
 		self.setPiconCfglist.append(getConfigListEntry(_("Saving too to backup directory"), cfg.save2backtoo))
@@ -1025,9 +1051,10 @@ class setPiconCfg(Screen, ConfigListScreen):
 			self["config"].invalidate(self["config"].list[self.setPiconCfglist.index(self.target_entry)])
 
 	def save(self):
-		if cfg.backup.value == cfg.target.value or cfg.backup.value == cfg.source.value:
-			self.backupWarning()
-			return
+		if cfg.save2backtoo.value:
+			if cfg.backup.value == cfg.target.value or cfg.backup.value == cfg.source.value:
+				self.backupWarning()
+				return
 		global SOURCE
 		SOURCE = cfg.source.value
 		global TARGET
