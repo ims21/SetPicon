@@ -366,3 +366,10 @@ msgstr "ذخیره کردن"
 msgid "Stream"
 msgstr ""
 
+#
+msgid "SetPicon"
+msgstr ""
+
+#
+msgid "Fully fill rectangles with picons"
+msgstr ""
