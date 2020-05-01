@@ -3,8 +3,9 @@ from . import _
 #
 #  Set Picon - Plugin E2
 #
-#  by ims (c) 2012 ims21@users.sourceforge.net
+#  by ims (c) 2012-2018 ims21@users.sourceforge.net
 #
+VERSION = 0.53
 #  This program is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License
 #  as published by the Free Software Foundation; either version 2
@@ -61,6 +62,7 @@ config.plugins.setpicon.sorting = ConfigSelection(default = "0", choices = [("0"
 config.plugins.setpicon.fill = ConfigYesNo(default=False)
 config.plugins.setpicon.move = ConfigYesNo(default=False)
 config.plugins.setpicon.moved = ConfigDirectory(MOVED)
+
 
 cfg = config.plugins.setpicon
 
@@ -742,10 +744,7 @@ class setPicon(Screen, HelpableScreen):
 			return _("Terrestrial")
 		if b == 0xffff:
 			return _("Cable")
-		direction = 'E'
-		if b > 1800:
-			b = 3600 - b
-			direction = 'W'
+		b, direction = (3600 - b, 'W') if b > 1800 else (b, 'E')
 		if revert:
 			return ("%s_%03d.%d") % (direction, b // 10, b % 10)
 		return ("%d.%d%s") % (b // 10, b % 10, direction)
@@ -807,15 +806,18 @@ class setPicon(Screen, HelpableScreen):
 	def ref2ProviderName(self, ref):
 #		SID:NS:TSID:ONID:STYPE:UNUSED(used for channelnumber in enigma1)
 #		X   X  X    X    D     D
-
+#		[0]	[1]   [2]   [3]	[4]  [5]  [6] [7]       [8]         [9]
 #		REFTYPE:FLAGS:STYPE:SID:TSID:ONID:NS:PARENT_SID:PARENT_TSID:UNUSED
 #		D       D     X     X   X    X    X  X          X           X
+
 		ref = [ int(x, 0x10) for x in ref.split(':')[:10]]
-		ref = "%04x:%08x:%04x:%04x:%d:0" % (ref[3], ref[6], ref[4], ref[5], ref[2])
+		ref = "%04x:%08x:%04x:%04x:%d" % (ref[3], ref[6], ref[4], ref[5], ref[2])
 		for i in self.providers:
-			if i[0] == ref:
+			p = i[0].split(':')
+			p_ref = ":".join((p[0],p[1],p[2],p[3],p[4]))
+			if p_ref == ref:
 				return i[1]
-		return "unknown"
+		return "-"
 
 	def getProviders(self):
 		lamedb = open(LAMEDB,"r")
@@ -829,9 +831,9 @@ class setPicon(Screen, HelpableScreen):
 			if len(prov) and prov[0][0] is 'p':
 				provider = prov[0].split(':')[1]
 				if not len(provider):
-					provider = "unknown"
+					provider = "-"
 			else:
-				provider = "unknown"
+				provider = "-"
 			self.providers.append((ref,provider))
 
 	def end(self):
@@ -859,6 +861,7 @@ class setPicon(Screen, HelpableScreen):
 				else:
 					self.sortPicons()
 					self.displayPicon()
+		self.getCurrentService()
 
 ### for graphics
 	def initGraphic(self):
@@ -968,7 +971,7 @@ class setPiconCfg(Screen, ConfigListScreen):
 		self["key_yellow"] = Label(_("Swap Dirs"))
 		self["key_blue"] = Label(_("Same Dirs"))
 
-		self["statusbar"] = Label("ims (c) 2014, v0.51,  %s" % getMemory(7))
+		self["statusbar"] = Label("ims(c) 2014-2018, v%s,  %s" % (VERSION, getMemory(7)))
 		self["actions"] = ActionMap(["SetupActions", "ColorActions"],
 		{
 			"green": self.save,
